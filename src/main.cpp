@@ -2,6 +2,8 @@
 #include <TFT_eSPI.h>
 #include "ui.h"
 
+#include "barographESP32.h"
+
 /*Don't forget to set Sketchbook location in File/Preferences to the path of your UI project (the parent foder of this INO file)*/
 
 /*Change to your screen resolution*/
@@ -22,6 +24,8 @@ void my_print(const char * buf)
 }
 #endif
 
+void touch_calibrate();
+
 /* Display flushing */
 void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p )
 {
@@ -41,7 +45,7 @@ void my_touchpad_read( lv_indev_drv_t * indev_driver, lv_indev_data_t * data )
 {
     uint16_t touchX = 0, touchY = 0;
 
-    bool touched = false;//tft.getTouch( &touchX, &touchY, 600 );
+    bool touched = tft.getTouch( &touchX, &touchY, 600 );
 
     if( !touched )
     {
@@ -75,12 +79,21 @@ void setup()
 
     lv_init();
 
+    setup_esp32();
+
+
+
 #if LV_USE_LOG != 0
     lv_log_register_print_cb( my_print ); /* register print function for debugging */
 #endif
 
+
     tft.begin();          /* TFT init */
     tft.setRotation( 3 ); /* Landscape orientation, flipped */
+    //touch_calibrate();
+    
+    uint16_t calData[5] = { 300, 3624, 247, 3543, 1 };
+    tft.setTouch(calData);
 
     lv_disp_draw_buf_init( &draw_buf, buf, NULL, screenWidth * screenHeight / 10 );
 
@@ -105,10 +118,64 @@ void setup()
     ui_init();
 
     Serial.println( "Setup done" );
+
+    // update the fields
+    lv_label_set_text (ui_Field1Label , "mb");
+    lv_label_set_text (ui_Field1Name , "Baro Now");
+    lv_textarea_set_text (ui_Field1Data , "1013.4");
 }
+
+
+
+static float baro = 1013.4f;
+static int lastupdate;
 
 void loop()
 {
     lv_timer_handler(); /* let the GUI do its work */
     delay(5);
+    loop_esp32();
+}
+
+void touch_calibrate()
+{
+  uint16_t calData[5];
+  uint8_t calDataOK = 0;
+
+  // Calibrate
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(20, 0);
+  tft.setTextFont(2);
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  tft.println("Touch corners as indicated");
+
+  tft.setTextFont(1);
+  tft.println();
+
+  tft.calibrateTouch(calData, TFT_MAGENTA, TFT_BLACK, 15);
+
+  Serial.println(); Serial.println();
+  Serial.println("// Use this calibration code in setup():");
+  Serial.print("  uint16_t calData[5] = ");
+  Serial.print("{ ");
+
+  for (uint8_t i = 0; i < 5; i++)
+  {
+    Serial.print(calData[i]);
+    if (i < 4) Serial.print(", ");
+  }
+
+  Serial.println(" };");
+  Serial.print("  tft.setTouch(calData);");
+  Serial.println(); Serial.println();
+
+  tft.fillScreen(TFT_BLACK);
+  
+  tft.setTextColor(TFT_GREEN, TFT_BLACK);
+  tft.println("Calibration complete!");
+  tft.println("Calibration code sent to Serial port.");
+
+  delay(4000);
 }
