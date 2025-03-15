@@ -123,6 +123,12 @@ void setup()
     lv_label_set_text (ui_Field1Label , "mb");
     lv_label_set_text (ui_Field1Name , "Baro Now");
     lv_textarea_set_text (ui_Field1Data , "1013.4");
+
+    // Name the fields
+    lv_label_set_text (ui_Field2Label , "Altitude");
+    lv_label_set_text (ui_Field3Label , "HDOP");
+    lv_label_set_text (ui_Field4Label , "Num Satellites");
+    
 }
 
 

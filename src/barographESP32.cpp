@@ -32,7 +32,17 @@ char version[] = "1.03";
 #include <NMEA2000_CAN.h>  // This will automatically choose right CAN library and create suitable NMEA2000 object
 #include <N2kMessages.h>
 
+// NMEA0183 support
+#include "NMEA0183.h"
+#include <NMEA0183Msg.h>
+#include <NMEA0183Messages.h>
+
+tNMEA0183Msg NMEA0183Msg;
+tNMEA0183 NMEA0183;
+
 #include "Free_Fonts.h"
+
+#include "gpsReader.h"
 
 extern TFT_eSPI tft;// = TFT_eSPI();
 
@@ -58,7 +68,7 @@ Adafruit_BMP280 bmp; // I2C
 #define LED_4 GPIO_NUM_25
 
 bool LED_1_State = 0;
-bool LED_2_State = 0;
+//bool LED_2_State = 0;
 bool LED_3_State = 0;
 bool LED_4_State = 0;
 
@@ -131,6 +141,40 @@ void DrawInitScreen(void);
  #define BMP 
  #define OTA
  //#define TESTEEPROM
+
+ // GPS Reader Functions
+ HardwareSerial gpsSerial(1);
+ GPSReader * gpsReader;
+
+typedef struct nmea_data
+{
+    char sentence[100];
+} nmea_data_t;
+
+xQueueHandle nmeaQueue;
+
+ void onReceiveFunc()
+ {
+     static std::string nmeaSentence;
+     while (gpsSerial.available())
+     {
+         char c = gpsSerial.read();
+         if (c == '\n')
+         {
+             // Process the complete NMEA sentence
+            nmea_data_t nmea;
+            strcpy (nmea.sentence , nmeaSentence.c_str());
+            xQueueSend (nmeaQueue , &nmea , 0);
+             nmeaSentence.clear();
+         }
+         else
+         {
+             nmeaSentence+=(c);
+         }
+     }
+ }
+ 
+
  
 //---------------------------------------------------------------------
 //
@@ -144,14 +188,14 @@ void setup_esp32()
     
     // Setup the LEDS
     pinMode (LED_1 , OUTPUT);
-    pinMode (LED_2 , OUTPUT);
+    //pinMode (LED_2 , OUTPUT);
     pinMode (LED_3 , OUTPUT);
-    pinMode (LED_4 , OUTPUT);
+    //pinMode (LED_4 , OUTPUT);
 
     digitalWrite (LED_1 , LOW);
-    digitalWrite (LED_2 , LOW);
+    //digitalWrite (LED_2 , LOW);
     digitalWrite (LED_3 , LOW);
-    digitalWrite (LED_4 , LOW);
+    ///digitalWrite (LED_4 , LOW);
 
 #ifdef OTA
     WiFi.mode(WIFI_STA);
@@ -203,7 +247,7 @@ void setup_esp32()
       Serial.println(WiFi.localIP());
     }
 
-    digitalWrite (LED_4 , HIGH);// wifi started
+    //digitalWrite (LED_4 , HIGH);// wifi started
     digitalWrite (LED_3 , LOW);// wifi started
 
 #endif
@@ -268,9 +312,9 @@ void setup_esp32()
     ReadData();
 
     digitalWrite (LED_1 , LOW);
-    digitalWrite (LED_2 , LOW);
+    //digitalWrite (LED_2 , LOW);
     digitalWrite (LED_3 , HIGH);
-    digitalWrite (LED_4 , LOW);
+    //digitalWrite (LED_4 , LOW);
 
      // draw the screen
     DrawInitScreen ();
@@ -278,8 +322,12 @@ void setup_esp32()
 #ifdef TESTEEPROM
     TestEeprom();
 #endif
-
-
+    gpsReader = new GPSReader(NMEA2000);
+    nmeaQueue = xQueueCreate(10 , sizeof(nmea_data_t));                               
+    gpsSerial.begin (GPS_BAUD , SERIAL_8N1 , GPIO_NUM_33 , GPIO_NUM_25);
+    //gpsSerial.onReceive (onReceiveFunc);
+    NMEA0183.SetMessageStream(&gpsSerial,3);
+    NMEA0183.Open();
    
 }
 
@@ -645,7 +693,7 @@ void DrawBaro (uint16_t baro)
         }
 
         // send the data to the lv_chart object
-        lv_chart_set_range (ui_Chart1 , LV_CHART_AXIS_PRIMARY_Y , 10000 , 10400);
+        //lv_chart_set_range (ui_Chart1 , LV_CHART_AXIS_PRIMARY_Y , 10000 , 10400);
         
 
         // draw the Horiontal lines
@@ -920,8 +968,22 @@ void SplashScreen ()
 void loop_esp32()
 {
     //SplashScreen();
-    LED_1_State = HIGH;
-    LED_2_State = LOW;
+    //LED_1_State = HIGH;
+    //LED_2_State = LOW;
+    
+    nmea_data_t nmea_data;
+    if (xQueueReceive (nmeaQueue , &nmea_data , 0))
+    {
+        //GPSReader gpsReader;
+        //gpsReader->processNMEASentence (nmea_data.sentence);
+
+    }
+
+    tNMEA0183Msg NMEA0183Msg;
+    while (NMEA0183.GetMessage(NMEA0183Msg))
+    {
+        gpsReader->processNMEASentence (NMEA0183Msg);
+    }
     
 
 #ifdef BMP
